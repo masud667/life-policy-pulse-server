@@ -1,50 +1,66 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const jwt = require('jsonwebtoken');
+const { MongoClient } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const port = process.env.PORT || 5000;
 
-app.use(cors());
+// Middleware
+app.use(cors({
+  origin: ['http://localhost:5173'],
+  credentials: true
+}));
 app.use(express.json());
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.cdz9cop.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`
-
-
+const uri =`mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.cdz9cop.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// MongoDB connection
 const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 });
+
 
 
 async function run() {
   try {
     await client.connect();
     const db = client.db("LifePolicyPulse");
-    const userCollection = db.collection("users");
-    console.log("✅ MongoDB connected");
-await userCollection.insertOne({
-  name: "Admin",
-  email: "admin@example.com",
-});
+    const usersCollection = db.collection("users");
+
+
+    // jwt token related
+app.post('/jwt',async (req, res) =>{
+  const {email} = req.body;
+  const user = {email}
+  const token = jwt.sign(user, process.env.KEY_SECRET, {expiresIn: '1h'})
+  res.send({token})
+})
+
+    // Routes
+    app.get("/", (req, res) => {
+      res.send("Server is running");
+    });
+
     app.get("/users", async (req, res) => {
-      const users = await userCollection.find().toArray();
+      const users = await usersCollection.find().toArray();
       res.send(users);
     });
-  } catch (err) {
-    console.error("MongoDB Error:", err);
+
+    app.post("/users", async (req, res) => {
+      const newUser = req.body;
+      const result = await usersCollection.insertOne(newUser);
+      res.send(result);
+    });
+
+  } catch (error) {
+    console.error(error);
   }
 }
 
 run();
 
-app.get("/", (req, res) => {
-  res.send({ msg: "Server is running" });
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
+// Start server
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
