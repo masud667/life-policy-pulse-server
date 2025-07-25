@@ -49,6 +49,7 @@ async function run() {
     const db = client.db("LifePolicyPulse");
     const usersCollection = db.collection("users");
     const policiesCollection = db.collection("policies");
+    const applicationsCollection = db.collection("applications");
 
     // jwt token related
     app.post("/jwt", async (req, res) => {
@@ -98,6 +99,14 @@ app.get("/policies/:id", async (req, res) => {
   } catch (err) {
     res.status(500).send({ error: "Failed to fetch policy" });
   }
+});
+
+
+app.post('/applications', async (req, res) => {
+  const application = req.body;
+  application.status = "pending"; // auto-set
+  const result = await applicationsCollection.insertOne(application);
+  res.send(result);
 });
 
     app.post("/users", async (req, res) => {
