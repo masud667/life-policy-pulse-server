@@ -19,7 +19,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 // verify Token middleware
-const verifyToken =(req, res, next) =>{
+const verifyToken = (req, res, next) => {
   const token = req?.cookies?.token;
   if (!token) {
     return res.status(401).send({ message: "Unauthorized access" });
@@ -29,15 +29,13 @@ const verifyToken =(req, res, next) =>{
     req.user = decoded;
     next();
 
-  //    const userEmail = req.user.email;
-  // const queryEmail = req.query.email;
-  // if (userEmail !== queryEmail) {
-  //   return res.status(403).send({ message: "Forbidden" });
-  // }
-
-  
+    //    const userEmail = req.user.email;
+    // const queryEmail = req.query.email;
+    // if (userEmail !== queryEmail) {
+    //   return res.status(403).send({ message: "Forbidden" });
+    // }
   });
-}
+};
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.cdz9cop.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // MongoDB connection
 const client = new MongoClient(uri, {
@@ -50,6 +48,7 @@ async function run() {
     await client.connect();
     const db = client.db("LifePolicyPulse");
     const usersCollection = db.collection("users");
+    const policiesCollection = db.collection("policies");
 
     // jwt token related
     app.post("/jwt", async (req, res) => {
@@ -64,34 +63,44 @@ async function run() {
       res.send({ token });
     });
 
-
-//logout 
-    app.post('/logout', (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: false,
-  
-  });
-  res.send({ message: 'Logged out successfully' });
-});
+    //logout
+    app.post("/logout", (req, res) => {
+      res.clearCookie("token", {
+        httpOnly: true,
+        secure: false,
+      });
+      res.send({ message: "Logged out successfully" });
+    });
 
     // Routes
     app.get("/", (req, res) => {
       res.send("Server is running");
     });
 
-    app.get("/users", async (req, res) => {
-      const users = await usersCollection.find().toArray();
-      res.send(users);
-    });
+   app.get("/policies", async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 9;
+  const skip = (page - 1) * limit;
+
+  const result = await policiesCollection.find().skip(skip).limit(limit).toArray();
+  const total = await policiesCollection.estimatedDocumentCount();
+
+  res.send({ result, total });
+});
 
     app.post("/users", async (req, res) => {
-      const newUser = req.body;
-      const result = await usersCollection.insertOne(newUser);
+      const user = req.body;
+      const query = { email: user.email };
+
+      const existingUser = await usersCollection.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "User already exists" });
+      }
+
+      const result = await usersCollection.insertOne(user);
       res.send(result);
     });
-  } catch (error) {
-    console.error(error);
+  } finally {
   }
 }
 
