@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
-const { MongoClient } = require("mongodb");
+const { MongoClient, ObjectId } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
@@ -86,6 +86,18 @@ async function run() {
   const total = await policiesCollection.estimatedDocumentCount();
 
   res.send({ result, total });
+});
+
+
+app.get("/policies/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const policy = await policiesCollection.findOne({ _id: new ObjectId(id) });
+    if (!policy) return res.status(404).json({ message: "Policy not found" });
+    res.send(policy);
+  } catch (err) {
+    res.status(500).send({ error: "Failed to fetch policy" });
+  }
 });
 
     app.post("/users", async (req, res) => {
