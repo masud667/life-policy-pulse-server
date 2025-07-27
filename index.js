@@ -50,6 +50,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const policiesCollection = db.collection("policies");
     const applicationsCollection = db.collection("applications");
+    const blogsCollection = db.collection("blogs");
 
     // jwt token related
     app.post("/jwt", async (req, res) => {
@@ -98,6 +99,37 @@ app.get("/policies/:id", async (req, res) => {
     res.send(policy);
   } catch (err) {
     res.status(500).send({ error: "Failed to fetch policy" });
+  }
+});
+
+// GET all blogs
+app.get("/blogs", async (req, res) => {
+  try {
+    const blogs = await blogsCollection.find().sort({ date: -1 }).toArray();
+    res.json(blogs);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch blogs", error });
+  }
+});
+
+app.get("/blogs/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    // যদি _id string হয় (যেমন "1")
+    if (!id) {
+      return res.status(400).json({ message: "Invalid blog ID" });
+    }
+
+    const blog = await blogsCollection.findOne({ _id: id });
+
+    if (!blog) {
+      return res.status(404).json({ message: "Blog not found" });
+    }
+
+    res.json(blog);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching blog", error });
   }
 });
 
