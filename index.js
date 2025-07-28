@@ -96,6 +96,16 @@ async function run() {
     app.get("/", (req, res) => {
       res.send("Server is running");
     });
+// GET /users
+app.get("/users", async (req, res) => {
+  try {
+    const users = await db.collection("users").find().toArray();
+    res.send(users);
+  } catch (err) {
+    res.status(500).send({ error: "Failed to fetch users" });
+  }
+});
+
 
     // GET all applications
 app.get("/applications", verifyToken, verifyAdmin, async (req, res) => {
@@ -103,6 +113,34 @@ app.get("/applications", verifyToken, verifyAdmin, async (req, res) => {
   res.send(applications);
 });
 
+
+// PATCH /users/promote/:id
+app.patch("/users/promote/:id", async (req, res) => {
+  const id = req.params.id;
+  const result = await db.collection("users").updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { role: "agent" } }
+  );
+  res.send(result);
+});
+
+// PATCH /users/demote/:id
+app.patch("/users/demote/:id", async (req, res) => {
+  const id = req.params.id;
+  const result = await db.collection("users").updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { role: "user" } }
+  );
+  res.send(result);
+});
+
+ // DELETE /users/:id
+app.delete("/users/:id", async (req, res) => {
+  const id = req.params.id;
+  const result = await db.collection("users").deleteOne({ _id: new ObjectId(id) });
+  res.send(result);
+});
+ 
 // PATCH: Update status (approve, reject)
 app.patch("/applications/:id", verifyToken, verifyAdmin, async (req, res) => {
   const { status, agentEmail } = req.body;
