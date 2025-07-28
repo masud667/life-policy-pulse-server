@@ -79,6 +79,19 @@ async function run() {
       res.send("Server is running");
     });
 
+
+app.get("/dashboard", verifyToken, async (req, res) => {
+  try {
+    const user = await usersCollection.findOne({ email: req.user.email });
+    if (!user) return res.status(404).send({ error: "User not found" });
+
+    res.send({ role: user.role });
+  } catch (error) {
+    res.status(500).send({ error: "Server Error" });
+  }
+});
+
+
    app.get("/policies", async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 9;
@@ -116,7 +129,6 @@ app.get("/blogs/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    // যদি _id string হয় (যেমন "1")
     if (!id) {
       return res.status(400).json({ message: "Invalid blog ID" });
     }
@@ -131,6 +143,17 @@ app.get("/blogs/:id", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Error fetching blog", error });
   }
+});
+app.patch("/blogs/:id", async (req, res) => {
+  const id = req.params.id;
+  const { visits } = req.body;
+
+  const result = await blogsCollection.updateOne(
+    { _id: id },  
+    { $set: { visits } }
+  );
+
+  res.json(result);
 });
 
 
