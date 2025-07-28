@@ -18,6 +18,7 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+
 // verify Token middleware
 const verifyToken = (req, res, next) => {
   const token = req?.cookies?.token;
@@ -29,13 +30,19 @@ const verifyToken = (req, res, next) => {
     req.user = decoded;
     next();
 
-    //    const userEmail = req.user.email;
-    // const queryEmail = req.query.email;
-    // if (userEmail !== queryEmail) {
-    //   return res.status(403).send({ message: "Forbidden" });
-    // }
+
   });
 };
+
+
+const verifyAdmin = (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden: Admins only" });
+  }
+  next();
+};
+
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.cdz9cop.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // MongoDB connection
 const client = new MongoClient(uri, {
@@ -52,18 +59,29 @@ async function run() {
     const applicationsCollection = db.collection("applications");
     const blogsCollection = db.collection("blogs");
 
-    // jwt token related
-    app.post("/jwt", async (req, res) => {
-      const { email } = req.body;
-      const user = { email };
-      const token = jwt.sign(user, process.env.KEY_SECRET, { expiresIn: "1d" });
+ app.post("/jwt", async (req, res) => {
+  const { email } = req.body;
 
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: false,
-      });
-      res.send({ token });
-    });
+  const user = await usersCollection.findOne({ email });
+
+  if (!user) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+
+  const token = jwt.sign(
+    { email, role: user.role }, 
+    process.env.KEY_SECRET,
+    { expiresIn: "1d" }
+  );
+
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: false, 
+    sameSite: "strict",
+  });
+
+  res.send({ token });
+});
 
     //logout
     app.post("/logout", (req, res) => {
@@ -78,6 +96,25 @@ async function run() {
     app.get("/", (req, res) => {
       res.send("Server is running");
     });
+
+    // GET all applications
+app.get("/applications", verifyToken, verifyAdmin, async (req, res) => {
+  const applications = await applicationsCollection.find().toArray();
+  res.send(applications);
+});
+
+// PATCH: Update status (approve, reject)
+app.patch("/applications/:id", verifyToken, verifyAdmin, async (req, res) => {
+  const { status, agentEmail } = req.body;
+  const update = { $set: { status } };
+  if (agentEmail) update.$set.agentEmail = agentEmail;
+
+  const result = await applicationsCollection.updateOne(
+    { _id: new ObjectId(req.params.id) },
+    update
+  );
+  res.send(result);
+});
 
 
 app.get("/dashboard", verifyToken, async (req, res) => {
