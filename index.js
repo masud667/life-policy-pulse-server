@@ -62,6 +62,8 @@ async function run() {
     const applicationsCollection = db.collection("applications");
     const blogsCollection = db.collection("blogs");
     const transactionsCollection = db.collection("transactions");
+    const testimonialsCollection = db.collection("testimonials");
+
 
 
 
@@ -114,8 +116,60 @@ app.post("/transactions", async (req, res) => {
   res.send(result);
 });
 
+// PUT or PATCH endpoint to approve an application
+app.patch("/applications/:id/approve", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { frequency } = req.body;  
+
+    const updatedPolicy = {
+      $set: {
+        status: "Approved",
+        frequency,       
+        paymentStatus: "Due"
+      }
+    };
+
+    const result = await applicationsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      updatedPolicy
+    );
+
+    if (result.modifiedCount === 1) {
+      res.status(200).send({ message: "Application approved successfully" });
+    } else {
+      res.status(404).send({ message: "Application not found or not updated" });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: "Internal server error" });
+  }
+});
 
 
+
+app.get("/approved-applications", async (req, res) => {
+  const email = req.query.email;
+
+  const result = await applicationsCollection.find({
+    userEmail: email,
+    status: "Approved"
+  }).toArray();
+
+  res.send(result);
+});
+
+app.patch("/applications/:id/pay", async (req, res) => {
+  const { id } = req.params;
+
+  const result = await applicationsCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { paymentStatus: "Paid" } }
+  );
+
+  res.send(result);
+});
+ 
 // GET /users
 app.get("/users", async (req, res) => {
   try {
@@ -174,6 +228,19 @@ app.patch("/applications/:id", verifyToken, verifyAdmin, async (req, res) => {
   res.send(result);
 });
 
+// POST /testimonials
+app.post("/testimonials", async (req, res) => {
+  const review = req.body;
+  const result = await db.collection("testimonials").insertOne(review);
+  res.send(result);
+});
+
+// GET /my-policies (with user filtering)
+app.get("/my-policies", async (req, res) => {
+  const email = req.query.email;
+  const result = await db.collection("applications").find({ userEmail: email }).toArray();
+  res.send(result);
+});
 
 app.get("/dashboard", verifyToken, async (req, res) => {
   try {
