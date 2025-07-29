@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const { MongoClient, ObjectId } = require("mongodb");
 require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -17,6 +18,8 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+// app.use("/stripe", require("./routes/stripe"));
+
 
 
 // verify Token middleware
@@ -58,6 +61,12 @@ async function run() {
     const policiesCollection = db.collection("policies");
     const applicationsCollection = db.collection("applications");
     const blogsCollection = db.collection("blogs");
+    const transactionsCollection = db.collection("transactions");
+
+
+
+
+
 
  app.post("/jwt", async (req, res) => {
   const { email } = req.body;
@@ -96,6 +105,17 @@ async function run() {
     app.get("/", (req, res) => {
       res.send("Server is running");
     });
+
+
+app.post("/transactions", async (req, res) => {
+  const transaction = req.body;
+  transaction.date = new Date();
+  const result = await transactionsCollection.insertOne(transaction);
+  res.send(result);
+});
+
+
+
 // GET /users
 app.get("/users", async (req, res) => {
   try {
@@ -167,7 +187,7 @@ app.get("/dashboard", verifyToken, async (req, res) => {
 });
 
 
-   app.get("/policies", async (req, res) => {
+  app.get("/policies", async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 9;
   const skip = (page - 1) * limit;
@@ -179,26 +199,54 @@ app.get("/dashboard", verifyToken, async (req, res) => {
 });
 
 
-app.get("/policies/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const policy = await policiesCollection.findOne({ _id: new ObjectId(id) });
-    if (!policy) return res.status(404).json({ message: "Policy not found" });
-    res.send(policy);
-  } catch (err) {
-    res.status(500).send({ error: "Failed to fetch policy" });
-  }
-});
 
-// GET all blogs
+
+ // Modified GET all blogs (with role-based filtering)
 app.get("/blogs", async (req, res) => {
   try {
-    const blogs = await blogsCollection.find().sort({ date: -1 }).toArray();
+    const { email, role } = req.query;
+
+    let filter = {};
+    if (role !== "admin") {
+      filter = { authorEmail: email }; // Only fetch current user's blogs
+    }
+
+    const blogs = await blogsCollection.find(filter).sort({ date: -1 }).toArray();
     res.json(blogs);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch blogs", error });
   }
 });
+
+
+  // POST blog
+  app.post("/blogs", async (req, res) => {
+    const blog = req.body;
+    blog.createdAt = new Date();
+    const result = await blogs.insertOne(blog);
+    res.send(result);
+  });
+
+  // PUT blog
+  app.put("/blogs/:id", async (req, res) => {
+    const id = req.params.id;
+    const update = req.body;
+    const result = await blogs.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: update }
+    );
+    res.send(result);
+  });
+
+  // DELETE blog
+  app.delete("/blogs/:id", async (req, res) => {
+    const id = req.params.id;
+    const result = await blogs.deleteOne({ _id: new ObjectId(id) });
+    res.send(result);
+  });
+
+
+
 
 app.get("/blogs/:id", async (req, res) => {
   try {
@@ -231,6 +279,87 @@ app.patch("/blogs/:id", async (req, res) => {
   res.json(result);
 });
 
+app.get("/policies/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid ID format" });
+  }
+
+  try {
+    const policy = await policiesCollection.findOne({ _id: new ObjectId(id) });
+  
+
+    if (!policy) {
+      return res.status(404).json({ message: "Policy not found" });
+    }
+
+    res.send(policy);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+
+// ✅ Update policy by ID
+app.patch("/policies/:id", async (req, res) => {
+  const { id } = req.params;
+  const updatedPolicy = req.body;
+
+  const result = await db.collection("policies").updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updatedPolicy }
+  );
+
+  res.send(result);
+});
+
+// POST /policies
+app.post("/policies", async (req, res) => {
+  const newPolicy = req.body;
+  newPolicy.createdAt = new Date();
+  const result = await db.collection("policies").insertOne(newPolicy);
+  res.send(result);
+});
+
+// PATCH /applications/:id/status
+app.patch("/applications/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status, policyId } = req.body;
+
+  try {
+    const result = await db.collection("applications").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status } }
+    );
+    
+    if (result.modifiedCount === 0) {
+      return res.status(404).send({ message: "Application not found" });
+    }
+
+    res.status(200).send({ message: "Status updated successfully" });
+  } catch (error) {
+    console.error("Error updating status:", error);
+    res.status(500).send({ message: "Server error", error: error.message });
+  }
+});
+
+// GET /agent/applications/:agentEmail
+app.get("/agent/applications/:agentEmail", async (req, res) => {
+  const { agentEmail } = req.params;
+  
+  try {
+    const applications = await db.collection("applications")
+      .find({ userEmail:  agentEmail })
+      .toArray();
+    
+    
+    res.status(200).send(applications);
+  } catch (error) {
+    console.error("Error fetching applications:", error);
+    res.status(500).send({ message: "Server error", error: error.message });
+  }
+});
 
 app.post('/applications', async (req, res) => {
   const application = req.body;
@@ -251,6 +380,13 @@ app.post('/applications', async (req, res) => {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
+
+    // DELETE /policies/:id
+app.delete("/policies/:id", async (req, res) => {
+  const result = await db.collection("policies").deleteOne({ _id: new ObjectId(req.params.id) });
+  res.send(result);
+});
+
   } finally {
   }
 }
