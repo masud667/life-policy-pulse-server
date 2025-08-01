@@ -57,6 +57,8 @@ async function run() {
     const blogsCollection = db.collection("blogs");
     const transactionsCollection = db.collection("transactions");
     const testimonialsCollection = db.collection("testimonials");
+    const newsletterCollection = db.collection("newsletter");
+    const claimsCollection = db.collection("claims");
 
     app.post("/jwt", async (req, res) => {
       const { email } = req.body;
@@ -222,12 +224,49 @@ async function run() {
       }
     );
 
-    // POST /testimonials
+  app.post("/newsletterSubscribe", async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    if (!name || !email) {
+      return res.status(400).send({ message: "Name and email are required." });
+    }
+    const result = await db.collection("newsletter").insertOne({ name, email, subscribedAt: new Date() });
+    res.send({ insertedId: result.insertedId });
+  } catch (err) {
+    res.status(500).send({ message: "Internal server error." });
+  }
+});
+
+// GET /agents/featured
+app.get("/agents/featured", async (req, res) => {
+  try {
+    const featuredAgents = await usersCollection
+      .find({ role: "agent" })
+      .limit(3)
+      .toArray();
+
+    res.send(featuredAgents);
+  } catch (error) {
+    console.error("Error fetching agents:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
+});
+
+ // POST /testimonials
     app.post("/testimonials", async (req, res) => {
       const review = req.body;
       const result = await db.collection("testimonials").insertOne(review);
       res.send(result);
     });
+// get testimonial 
+app.get('/testimonials', async (req, res) => {
+  try {
+    const testimonials = await db.collection('testimonials').find().toArray();
+    res.send(testimonials);
+  } catch (err) {
+    res.status(500).send({ error: 'Failed to fetch testimonials' });
+  }
+});
 
     // GET /my-policies (with user filtering)
     app.get("/my-policies", async (req, res) => {
@@ -250,8 +289,24 @@ async function run() {
       }
     });
 
+// Backend (Express)
+app.post("/claims", async (req, res) => {
+  try {
+    const { policyId, policyName, email, reason } = req.body;
+    const file = req.file;
 
+    // Optional: Check for existing pending claim
+    const existing = await db.collection("claims").findOne({
+      policyId,
+      email,
+      status: "Pending",
+    });
 
+  } catch (err) {
+    console.error("Claim POST error:", err);
+    res.status(500).json({ message: "Failed to submit claim" });
+  }
+});
 
 
     app.get("/policies", async (req, res) => {
@@ -289,19 +344,27 @@ async function run() {
       }
     });
 
-    // POST blog
-    app.post("/blogs", async (req, res) => {
-      const blog = req.body;
-      blog.createdAt = new Date();
-      const result = await blogs.insertOne(blog);
-      res.send(result);
-    });
+   
+  // POST /blogs
+app.post("/blogs", async (req, res) => {
+  try {
+    const blog = req.body;
+    blog.createdAt = new Date(); 
+
+    const result = await blogsCollection.insertOne(blog);
+    res.send(result);
+  } catch (err) {
+    console.error("Failed to create blog:", err);
+    res.status(500).send({ error: "Internal Server Error" });
+  }
+});
+
 
     // PUT blog
     app.put("/blogs/:id", async (req, res) => {
       const id = req.params.id;
       const update = req.body;
-      const result = await blogs.updateOne(
+      const result = await blogsCollection.updateOne(
         { _id: new ObjectId(id) },
         { $set: update }
       );
@@ -311,7 +374,7 @@ async function run() {
     // DELETE blog
     app.delete("/blogs/:id", async (req, res) => {
       const id = req.params.id;
-      const result = await blogs.deleteOne({ _id: new ObjectId(id) });
+      const result = await blogsCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
@@ -331,7 +394,6 @@ async function run() {
     app.patch("/blogs/:id", async (req, res) => {
       const id = req.params.id;
       const { visits } = req.body;
-
       const result = await blogsCollection.updateOne(
         { _id: id },
         { $set: { visits } }
@@ -362,17 +424,35 @@ async function run() {
       }
     });
 
-    // ✅ Update policy by ID
-    app.patch("/policies/:id", async (req, res) => {
-      const { id } = req.params;
-      const updatedPolicy = req.body;
+    // Update policy by ID
+   app.patch("/policies/:id", async (req, res) => {
+  const { id } = req.params;
+  const updatedPolicy = req.body;
 
-      const result = await db
-        .collection("policies")
-        .updateOne({ _id: new ObjectId(id) }, { $set: updatedPolicy });
+  // Check for valid ObjectId
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid Policy ID" });
+  }
 
-      res.send(result);
-    });
+  try {
+    // Optional: log what’s being updated
+    console.log("Updating Policy:", id, updatedPolicy);
+
+    const result = await db.collection("policies").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedPolicy }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Policy not found" });
+    }
+
+    res.json({ message: "Policy updated successfully", result });
+  } catch (error) {
+    console.error("Error updating policy:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
     // POST /policies
     app.post("/policies", async (req, res) => {
@@ -381,6 +461,22 @@ async function run() {
       const result = await db.collection("policies").insertOne(newPolicy);
       res.send(result);
     });
+
+    // PATCH /policies/:id/purchase
+app.patch("/policies/:id/purchase", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await policiesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $inc: { purchaseCount: 1 } }
+    );
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: "Failed to increment purchase count" });
+  }
+});
 
     // PATCH /applications/:id/status
     app.patch("/applications/:id/status", async (req, res) => {
@@ -404,7 +500,7 @@ async function run() {
     });
 
     // GET /agent/applications/:agentEmail
-    app.get("/agent/applications/:agentEmail", async (req, res) => {
+    app.get("/agent/applications/:userEmail", async (req, res) => {
       const { agentEmail } = req.params;
 
       try {
