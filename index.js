@@ -423,24 +423,19 @@ app.post("/blogs", async (req, res) => {
         res.status(500).json({ message: "Server error", error: error.message });
       }
     });
-
-    // Update policy by ID
-   app.patch("/policies/:id", async (req, res) => {
+    
+// Update policy by ID (string _id)
+app.patch("/policies/:id", async (req, res) => {
   const { id } = req.params;
   const updatedPolicy = req.body;
 
-  // Check for valid ObjectId
-  if (!ObjectId.isValid(id)) {
-    return res.status(400).json({ message: "Invalid Policy ID" });
-  }
-
   try {
-    // Optional: log what’s being updated
-    console.log("Updating Policy:", id, updatedPolicy);
+    // Ensure _id is not included in $set
+    const { _id, ...dataToUpdate } = updatedPolicy;
 
     const result = await db.collection("policies").updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updatedPolicy }
+      { _id: id },       // string id
+      { $set: dataToUpdate }
     );
 
     if (result.matchedCount === 0) {
@@ -449,10 +444,11 @@ app.post("/blogs", async (req, res) => {
 
     res.json({ message: "Policy updated successfully", result });
   } catch (error) {
-    console.error("Error updating policy:", error);
+    console.error("Error updating policy:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
+
 
     // POST /policies
     app.post("/policies", async (req, res) => {
